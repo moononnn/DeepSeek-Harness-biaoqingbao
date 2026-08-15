@@ -259,6 +259,71 @@ window.__ModuleLoader__.load({
         const files = Array.from(e.target.files || [])
         e.target.value = ''
         if (!files.length) return
+        readFilesToJobs(files).then(valid => {
+          if (!valid.length) { setMsgError(true); setMsg('没有可上传的图片'); return }
+          uploadInBatches(valid)
+        })
+      }
+      const onFolderFiles = (e) => {
+        const files = Array.from(e.target.files || [])
+        e.target.value = ''
+        if (!files.length) return
+        const FOLDER_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+        const images = files.filter(f => {
+          const ext = (f.name.split('.').pop() || '').toLowerCase()
+          return FOLDER_EXTS.indexOf(ext) >= 0
+        })
+        const skipped = files.length - images.length
+        if (!images.length) {
+          setMsgError(true)
+          setMsg('文件夹里没找到图片（PNG/JPG/GIF/WebP/BMP）' + (skipped > 0 ? '，有 ' + skipped + ' 个其他文件被跳过' : ''))
+          return
+        }
+        if (images.length > 200) {
+          setMsgError(true)
+          setMsg('文件夹里图片太多（' + images.length + ' 张），单次最多导入 200 张，请分批选择')
+          return
+        }
+        setMsg('正在读取文件夹图片…')
+        setMsgError(false)
+        readFilesToJobs(images).then(valid => {
+          if (!valid.length) { setMsgError(true); setMsg('没有可上传的图片'); return }
+          setMsg('已从文件夹读取 ' + valid.length + ' 张图片' + (skipped > 0 ? '（自动跳过 ' + skipped + ' 个非图片文件）' : '') + '，开始上传…')
+          uploadInBatches(valid)
+        })
+      }
+      const onZipFile = (e) => {
+        const file = e.target.files && e.target.files[0]
+        e.target.value = ''
+        if (!file) return
+        if (file.size > 50 * 1024 * 1024) { setMsgError(true); setMsg('ZIP 文件不能超过 50MB'); return }
+        if (uploading) return
+        setUploading(true)
+        setMsg('正在读取 ZIP…')
+        setMsgError(false)
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = String(reader.result || '')
+          setMsg('正在导入 ZIP…')
+          host.call('import-zip', { zipBase64: dataUrl, fileName: file.name }).then(r => {
+            if (r && r.ok) {
+              const d = r.data || {}
+              let text = r.message || ('成功导入 ' + d.imported + ' 张')
+              if (d.skippedItems && d.skippedItems.length) {
+                text += '\n跳过详情：' + d.skippedItems.map(s => s.file + '：' + s.reason).join('\n')
+              }
+              setMsg(text)
+              setMsgError(false)
+              load(query, 0)
+            } else {
+              setMsgError(true); setMsg('ZIP 导入失败：' + (r && r.error || '未知错误'))
+            }
+          }).catch(() => { setMsgError(true); setMsg('ZIP 导入失败') }).finally(() => setUploading(false))
+        }
+        reader.onerror = () => { setMsgError(true); setMsg('ZIP 读取失败'); setUploading(false) }
+        reader.readAsDataURL(file)
+      }
+      const readFilesToJobs = (files) => {
         const jobs = files.map(f => new Promise(resolve => {
           const reader = new FileReader()
           reader.onload = () => {
@@ -269,20 +334,32 @@ window.__ModuleLoader__.load({
           reader.onerror = () => resolve(null)
           reader.readAsDataURL(f)
         }))
-        Promise.all(jobs).then(list => {
-          const valid = list.filter(Boolean)
-          if (!valid.length) { setMsgError(true); setMsg('没有可上传的图片'); return }
-          setUploading(true)
-          host.call('upload', { files: valid }).then(r => {
-            if (r && r.ok) {
-              setMsg(r.added > 0 ? '已添加 ' + r.added + ' 张' + ((valid.length - r.added) > 0 ? '（' + (valid.length - r.added) + ' 张被跳过）' : '') : '没有图片被添加')
-              setMsgError(r.added === 0)
-              load(query, 0)
-            } else {
-              setMsgError(true); setMsg('上传失败：' + (r && r.error || '未知错误'))
-            }
-          }).catch(() => { setMsgError(true); setMsg('上传失败') }).finally(() => setUploading(false))
-        })
+        return Promise.all(jobs).then(list => list.filter(Boolean))
+      }
+      const uploadInBatches = (jobs) => {
+        const BATCH = 40
+        const total = jobs.length
+        let idx = 0
+        let addedTotal = 0
+        setUploading(true)
+        const run = () => {
+          if (idx >= total) {
+            const skipped = total - addedTotal
+            setUploading(false)
+            setMsg(addedTotal > 0 ? '已添加 ' + addedTotal + ' 张' + (skipped > 0 ? '（' + skipped + ' 张被跳过）' : '') : '没有图片被添加')
+            setMsgError(addedTotal === 0)
+            load(query, 0)
+            return
+          }
+          const batch = jobs.slice(idx, idx + BATCH)
+          idx += BATCH
+          setMsg('上传中…（' + Math.min(idx, total) + '/' + total + '）')
+          host.call('upload', { files: batch }).then(r => {
+            if (r && r.ok) addedTotal += r.added
+            run()
+          }).catch(() => { run() })
+        }
+        run()
       }
 
       if (detail) {
@@ -302,11 +379,19 @@ window.__ModuleLoader__.load({
           React.createElement('button', { className: 'bqb-btn', onClick: onBatchTag, disabled: batchTagging }, batchTagging ? '识图中…' : '批量识图'),
           React.createElement('label', { className: 'bqb-btn bqb-btn-primary', style: { cursor: 'pointer' } },
             uploading ? '上传中…' : '上传图片',
-            React.createElement('input', { type: 'file', multiple: true, accept: 'image/png,image/jpeg,image/webp,image/gif', style: { display: 'none' }, onChange: onFiles })
+            React.createElement('input', { type: 'file', multiple: true, accept: 'image/png,image/jpeg,image/webp,image/gif,image/bmp', style: { display: 'none' }, onChange: onFiles })
+          ),
+          React.createElement('label', { className: 'bqb-btn', style: { cursor: 'pointer' } },
+            uploading ? '…' : '选文件夹',
+            React.createElement('input', { type: 'file', webkitdirectory: true, multiple: true, style: { display: 'none' }, onChange: onFolderFiles })
+          ),
+          React.createElement('label', { className: 'bqb-btn', style: { cursor: 'pointer' } },
+            uploading ? '…' : '导入 ZIP',
+            React.createElement('input', { type: 'file', accept: '.zip', style: { display: 'none' }, onChange: onZipFile })
           )
         ),
         React.createElement('div', { className: 'bqb-stats' }, '共 ' + total + ' 张' + (busy ? ' · 加载中…' : '') + ' · 批量识图会为未打标签的图片生成描述和标签（使用已配置的模型）'),
-        msg ? React.createElement('div', { className: 'bqb-msg' + (msgError ? ' bqb-msg-error' : '') }, msg) : null,
+        msg ? React.createElement('div', { className: 'bqb-msg' + (msgError ? ' bqb-msg-error' : ''), style: { whiteSpace: 'pre-wrap' } }, msg) : null,
         items.length === 0 && !busy
           ? React.createElement('div', { className: 'bqb-empty' }, total === 0 ? '图库还是空的。\n点击右上角「上传图片」，选择你收集的表情包（支持多选 PNG/JPG/WebP/GIF）。\n上传后助手就能在聊天中用它表达情绪了。' : '没有匹配的表情包')
           : React.createElement('div', { className: 'bqb-grid' },
@@ -439,6 +524,10 @@ window.__ModuleLoader__.load({
       const [styleDraft, setStyleDraft] = React.useState('')
       const [styleCurrent, setStyleCurrent] = React.useState('')
       const [styleBusy, setStyleBusy] = React.useState(false)
+      const [providers, setProviders] = React.useState([])
+      const [embedCfg, setEmbedCfg] = React.useState({ customBaseUrl: '', customApiKey: '', customModel: '', customDimensions: 0, hasKey: false })
+      const [vectorStatus, setVectorStatus] = React.useState(null)
+      const [embedBusy, setEmbedBusy] = React.useState('') // '' | 'test' | 'index'
       const [msg, setMsg] = React.useState('')
       const [msgError, setMsgError] = React.useState(false)
       const reload = () => {
@@ -454,11 +543,57 @@ window.__ModuleLoader__.load({
             setDialectBoost(!!(r.data.dialect && r.data.dialect.boost))
             setStyleCurrent((r.data.style && r.data.style.current) || '')
             setStyleDraft((r.data.style && r.data.style.draft) || '')
+            if (r.data.embedding) setEmbedCfg(r.data.embedding)
           }
         }).catch(() => {})
       }
       React.useEffect(reload, [])
+      // 模型下拉 + 向量状态（与配置读取并发，独立计数器由各自 then 保护）
+      React.useEffect(() => {
+        host.call('list-models', {}).then(r => { if (r && r.ok && Array.isArray(r.data)) setProviders(r.data) }).catch(() => {})
+        host.call('vector-status', {}).then(r => { if (r && r.ok) setVectorStatus(r.data) }).catch(() => {})
+      }, [])
       const toast = (text, isError) => { setMsg(text); setMsgError(!!isError) }
+      const currentProvider = providers.find(p => p.providerId === visionProvider) || null
+      const currentModels = currentProvider ? currentProvider.models : []
+      const providerSelValue = currentProvider ? currentProvider.providerId : '__custom__'
+      const modelSelValue = currentModels.some(m => m.id === visionModel) ? visionModel : '__custom__'
+      const onProviderChange = (id) => {
+        const p = providers.find(x => x.providerId === id)
+        setVisionProvider(id)
+        if (p && p.models.length) setVisionModel(p.models[0].id)
+        else setVisionModel('')
+      }
+      const onModelChange = (id) => setVisionModel(id)
+      const saveEmbed = () => {
+        host.call('embedding-config-set', { customBaseUrl: embedCfg.customBaseUrl, customApiKey: embedCfg.customApiKey, customModel: embedCfg.customModel }).then(r => {
+          if (r && r.ok) { toast('向量检索配置已保存', false); reload() }
+          else toast('保存失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('保存失败', true))
+      }
+      const testEmbed = () => {
+        if (embedBusy) return
+        setEmbedBusy('test')
+        toast('正在测试连通…', false)
+        host.call('embedding-test', { customBaseUrl: embedCfg.customBaseUrl, customApiKey: embedCfg.customApiKey, customModel: embedCfg.customModel }).then(r => {
+          if (r && r.ok) toast('连接成功：返回 ' + r.data.dimensions + ' 维向量（' + r.data.model + '）', false)
+          else toast('连接失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('连接失败', true)).finally(() => setEmbedBusy(''))
+      }
+      const genEmbed = () => {
+        if (embedBusy) return
+        setEmbedBusy('index')
+        toast('正在为有语义描述的图片生成向量，请稍候…', false)
+        host.call('generate-embeddings', {}).then(r => {
+          if (r && r.ok) {
+            const d = r.data
+            toast('向量生成完成：成功 ' + d.processed + ' 张' + (d.failed > 0 ? '，失败 ' + d.failed + ' 张' : '') + (d.note ? '。' + d.note : ''), d.failed > 0 && d.processed === 0)
+            host.call('vector-status', {}).then(s => { if (s && s.ok) setVectorStatus(s.data) }).catch(() => {})
+          } else {
+            toast('生成失败：' + (r && r.error || '未知错误'), true)
+          }
+        }).catch(() => toast('生成失败', true)).finally(() => setEmbedBusy(''))
+      }
       const saveBase = () => {
         host.call('config-set', { visionProvider, visionModel, observer: { enabled: observerOn, frequency: observerFreq }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
           if (r && r.ok) toast('设置已保存', false)
@@ -526,14 +661,60 @@ window.__ModuleLoader__.load({
             React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
           ),
           React.createElement('div', { className: 'bqb-field' },
-            React.createElement('label', null, 'Provider（留空则用当前会话默认模型）'),
-            React.createElement('input', { className: 'bqb-input', value: visionProvider, onChange: e => setVisionProvider(e.target.value), placeholder: '如 deepseek-official' })
+            React.createElement('label', null, '从 dsh 已配置的模型里选（推荐）'),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 4 } },
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: providerSelValue, onChange: e => onProviderChange(e.target.value) },
+                React.createElement('option', { value: '__custom__' }, '（自定义…）'),
+                ...providers.map(p => React.createElement('option', { key: p.providerId, value: p.providerId }, p.providerName + (p.models.length ? '' : '（无模型）')))
+              ),
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: modelSelValue, onChange: e => onModelChange(e.target.value), disabled: !currentProvider },
+                React.createElement('option', { value: '__custom__' }, '（自定义…）'),
+                ...currentModels.map(m => React.createElement('option', { key: m.id, value: m.id }, m.name + (m.supportsImage === true ? '（支持图片）' : m.supportsImage === false ? '（未声明支持图片）' : '')))
+              )
+            )
           ),
-          React.createElement('div', { className: 'bqb-field', style: { marginTop: 6 } },
-            React.createElement('label', null, '视觉模型 ID'),
-            React.createElement('input', { className: 'bqb-input', value: visionModel, onChange: e => setVisionModel(e.target.value), placeholder: '如 deepseek-chat（需支持图片输入）' })
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '列表来自 dsh 已配置的模型。标注「支持图片」表示该模型声明了图片输入能力；未标注的也可能支持，以实际识图测试为准。'),
+          React.createElement('div', { className: 'bqb-field', style: { marginTop: 8 } },
+            React.createElement('label', null, '或自定义 Provider / 模型 ID（留空则用当前会话默认模型）'),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 4 } },
+              React.createElement('input', { className: 'bqb-input', style: { flex: 1 }, value: visionProvider, onChange: e => setVisionProvider(e.target.value), placeholder: 'Provider，如 deepseek-official' }),
+              React.createElement('input', { className: 'bqb-input', style: { flex: 1 }, value: visionModel, onChange: e => setVisionModel(e.target.value), placeholder: '模型 ID，需支持图片输入' })
+            )
           ),
           React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '识图需要支持图片输入的模型。不配置时使用会话默认模型；若默认模型不支持图片，识图会失败，请在此指定一个视觉模型。')
+        ),
+        // 向量检索
+        React.createElement('div', { className: 'bqb-pref-row' },
+          React.createElement('div', { className: 'bqb-pref-head' },
+            React.createElement('span', { className: 'bqb-pref-emotion' }, '向量检索（可选）'),
+            React.createElement('div', { style: { display: 'flex', gap: 6 } },
+              React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: testEmbed, disabled: !!embedBusy }, embedBusy === 'test' ? '测试中…' : '测试连通'),
+              React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveEmbed }, '保存')
+            )
+          ),
+          React.createElement('div', { className: 'bqb-field' },
+            React.createElement('label', null, 'Base URL（OpenAI 兼容 /embeddings 接口，如 https://api.openai.com/v1）'),
+            React.createElement('input', { className: 'bqb-input', value: embedCfg.customBaseUrl, onChange: e => setEmbedCfg(prev => ({ ...prev, customBaseUrl: e.target.value })), placeholder: 'https://…/v1' })
+          ),
+          React.createElement('div', { className: 'bqb-field', style: { marginTop: 6 } },
+            React.createElement('label', null, 'API Key'),
+            React.createElement('input', { className: 'bqb-input', type: 'password', value: embedCfg.customApiKey, onChange: e => setEmbedCfg(prev => ({ ...prev, customApiKey: e.target.value })), placeholder: embedCfg.hasKey ? '已保存（输入新 Key 可覆盖）' : 'sk-…' })
+          ),
+          React.createElement('div', { className: 'bqb-field', style: { marginTop: 6 } },
+            React.createElement('label', null, '模型名'),
+            React.createElement('input', { className: 'bqb-input', value: embedCfg.customModel, onChange: e => setEmbedCfg(prev => ({ ...prev, customModel: e.target.value })), placeholder: '如 text-embedding-3-small' })
+          ),
+          React.createElement('div', { className: 'bqb-row', style: { marginTop: 8 } },
+            React.createElement('button', { className: 'bqb-btn', onClick: genEmbed, disabled: !!embedBusy }, embedBusy === 'index' ? '生成中…' : '生成索引'),
+            React.createElement('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, '为所有有语义描述的图片生成向量')
+          ),
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } },
+            vectorStatus
+              ? (vectorStatus.configured
+                  ? '状态：已生成 ' + vectorStatus.vectorCount + '/' + vectorStatus.withSemanticDesc + ' 个向量' + (vectorStatus.pending > 0 ? '，待生成 ' + vectorStatus.pending : '') + (vectorStatus.model ? '，模型 ' + vectorStatus.model : '') + (vectorStatus.dimensions ? '，维度 ' + vectorStatus.dimensions : '') + (vectorStatus.generated_at ? '，生成于 ' + vectorStatus.generated_at.substring(0, 10) : '')
+                  : '未配置。配置后配图时会用语义相似度给表情包加分，找图更准。')
+              : '未配置。配置后配图时会用语义相似度给表情包加分，找图更准。'
+          )
         ),
         // 方言口音
         React.createElement('div', { className: 'bqb-pref-row' },
