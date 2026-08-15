@@ -225,6 +225,7 @@ window.__ModuleLoader__.load({
       const [detail, setDetail] = React.useState(null)
       const [uploading, setUploading] = React.useState(false)
       const [batchTagging, setBatchTagging] = React.useState(false)
+      const [autoTag, setAutoTag] = React.useState(false)
 
       const load = (q, off) => {
         setBusy(true)
@@ -315,6 +316,9 @@ window.__ModuleLoader__.load({
               setMsg(text)
               setMsgError(false)
               load(query, 0)
+              if (autoTag && d.importedIds && d.importedIds.length) {
+                setTimeout(() => runTagQueue(d.importedIds), 300)
+              }
             } else {
               setMsgError(true); setMsg('ZIP 导入失败：' + (r && r.error || '未知错误'))
             }
@@ -336,26 +340,65 @@ window.__ModuleLoader__.load({
         }))
         return Promise.all(jobs).then(list => list.filter(Boolean))
       }
+      const runTagQueue = (ids) => {
+        const list = ids.filter(Boolean)
+        if (!list.length) return
+        let done = 0
+        const total = list.length
+        setMsg('上传完成，后台识图中…（0/' + total + '）')
+        setMsgError(false)
+        const next = () => {
+          if (done >= total) {
+            setMsg('后台识图完成：' + total + ' 张')
+            setMsgError(false)
+            load(query, 0)
+            return
+          }
+          const id = list[done]
+          host.call('vision-tag', { id }).then(r => {
+            done++
+            setMsg('后台识图中…（' + done + '/' + total + '）' + (r && r.ok ? '' : '（失败：' + (r && r.error || '未知错误') + '）'))
+            setMsgError(false)
+            next()
+          }).catch(() => {
+            done++
+            setMsg('后台识图中…（' + done + '/' + total + '）')
+            next()
+          })
+        }
+        next()
+      }
       const uploadInBatches = (jobs) => {
         const BATCH = 40
         const total = jobs.length
         let idx = 0
         let addedTotal = 0
+        const newIds = []
         setUploading(true)
         const run = () => {
           if (idx >= total) {
             const skipped = total - addedTotal
             setUploading(false)
-            setMsg(addedTotal > 0 ? '已添加 ' + addedTotal + ' 张' + (skipped > 0 ? '（' + skipped + ' 张被跳过）' : '') : '没有图片被添加')
-            setMsgError(addedTotal === 0)
-            load(query, 0)
+            if (addedTotal > 0) {
+              setMsg('已添加 ' + addedTotal + ' 张' + (skipped > 0 ? '（' + skipped + ' 张被跳过）' : ''))
+              setMsgError(false)
+              load(query, 0)
+              if (autoTag && newIds.length) runTagQueue(newIds)
+            } else {
+              setMsg('没有图片被添加')
+              setMsgError(true)
+              load(query, 0)
+            }
             return
           }
           const batch = jobs.slice(idx, idx + BATCH)
           idx += BATCH
           setMsg('上传中…（' + Math.min(idx, total) + '/' + total + '）')
           host.call('upload', { files: batch }).then(r => {
-            if (r && r.ok) addedTotal += r.added
+            if (r && r.ok) {
+              addedTotal += r.added
+              if (Array.isArray(r.addedIds)) newIds.push(...r.addedIds)
+            }
             run()
           }).catch(() => { run() })
         }
@@ -383,11 +426,15 @@ window.__ModuleLoader__.load({
           ),
           React.createElement('label', { className: 'bqb-btn', style: { cursor: 'pointer' } },
             uploading ? '…' : '选文件夹',
-            React.createElement('input', { type: 'file', webkitdirectory: true, multiple: true, style: { display: 'none' }, onChange: onFolderFiles })
+            React.createElement('input', { type: 'file', webkitDirectory: '', multiple: true, style: { display: 'none' }, onChange: onFolderFiles })
           ),
           React.createElement('label', { className: 'bqb-btn', style: { cursor: 'pointer' } },
             uploading ? '…' : '导入 ZIP',
             React.createElement('input', { type: 'file', accept: '.zip', style: { display: 'none' }, onChange: onZipFile })
+          ),
+          React.createElement('label', { className: 'bqb-hint', style: { display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', padding: '0 4px' } },
+            React.createElement('input', { type: 'checkbox', className: 'bqb-check', checked: autoTag, onChange: e => setAutoTag(e.target.checked) }),
+            '上传后自动识图'
           )
         ),
         React.createElement('div', { className: 'bqb-stats' }, '共 ' + total + ' 张' + (busy ? ' · 加载中…' : '') + ' · 批量识图会为未打标签的图片生成描述和标签（使用已配置的模型）'),
@@ -528,6 +575,7 @@ window.__ModuleLoader__.load({
       const [embedCfg, setEmbedCfg] = React.useState({ customBaseUrl: '', customApiKey: '', customModel: '', customDimensions: 0, hasKey: false })
       const [vectorStatus, setVectorStatus] = React.useState(null)
       const [embedBusy, setEmbedBusy] = React.useState('') // '' | 'test' | 'index'
+      const [visionBusy, setVisionBusy] = React.useState(false)
       const [msg, setMsg] = React.useState('')
       const [msgError, setMsgError] = React.useState(false)
       const reload = () => {
@@ -565,6 +613,15 @@ window.__ModuleLoader__.load({
         else setVisionModel('')
       }
       const onModelChange = (id) => setVisionModel(id)
+      const testVision = () => {
+        if (visionBusy) return
+        setVisionBusy(true)
+        toast('正在测试模型连通…', false)
+        host.call('vision-test', { visionProvider, visionModel }).then(r => {
+          if (r && r.ok) toast('连接正常：' + r.data.provider + ' / ' + r.data.model + (r.data.reply ? '（模型回复：' + r.data.reply + '）' : ''), false)
+          else toast('测试失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('测试失败', true)).finally(() => setVisionBusy(false))
+      }
       const saveEmbed = () => {
         host.call('embedding-config-set', { customBaseUrl: embedCfg.customBaseUrl, customApiKey: embedCfg.customApiKey, customModel: embedCfg.customModel }).then(r => {
           if (r && r.ok) { toast('向量检索配置已保存', false); reload() }
@@ -658,7 +715,10 @@ window.__ModuleLoader__.load({
         React.createElement('div', { className: 'bqb-pref-row' },
           React.createElement('div', { className: 'bqb-pref-head' },
             React.createElement('span', { className: 'bqb-pref-emotion' }, 'AI 识图模型'),
-            React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
+            React.createElement('div', { style: { display: 'flex', gap: 6 } },
+              React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: testVision, disabled: visionBusy }, visionBusy ? '测试中…' : '测试一下'),
+              React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
+            )
           ),
           React.createElement('div', { className: 'bqb-field' },
             React.createElement('label', null, '从 dsh 已配置的模型里选（推荐）'),
