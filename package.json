@@ -1,0 +1,66 @@
+{
+  "name": "dsh-biaoqingbao",
+  "description": "Sticker/emoji expression plugin for DeepSeek Harness — assistants send stickers to express emotions, with library management, AI tagging, auto-matching, dialects and style mimicry. · DSH 表情包插件：让助手用表情包表达情绪，含图库管理、AI 识图、自动配图、方言口音与学我说话。",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moononnn/DeepSeek-Harness-biaoqingbao.git"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "sticker",
+    "emoji",
+    "expression",
+    "dialect",
+    "表情包"
+  ],
+  "scripts": {
+    "check": "node --check lib/index.js && node --check client/client.js",
+    "test": "node --test test/",
+    "prepack": "npm run check && npm run test"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.6"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  }
+}

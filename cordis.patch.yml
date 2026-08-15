@@ -1,0 +1,4 @@
+# dsh bundle patch: inserts the sticker plugin into a profile's layer stack.
+- insert:
+    - id: biaoqingbao
+      name: 'dsh-biaoqingbao'
