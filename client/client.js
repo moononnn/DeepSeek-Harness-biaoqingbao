@@ -702,14 +702,9 @@ window.__ModuleLoader__.load({
             React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
           ),
           React.createElement('div', { className: 'bqb-row' },
-            React.createElement('label', null, React.createElement('input', { type: 'checkbox', className: 'bqb-check', checked: observerOn, onChange: e => setObserverOn(e.target.checked) }), '开启：观察每轮对话的情绪，有波动时提示助手发图'),
+            React.createElement('label', null, React.createElement('input', { type: 'checkbox', className: 'bqb-check', checked: observerOn, onChange: e => setObserverOn(e.target.checked) }), '开启：观察每轮对话的情绪，有波动时提示助手发图')
           ),
-          React.createElement('div', { className: 'bqb-row' },
-            React.createElement('label', { style: { flex: 'none' } }, '分析频率'),
-            React.createElement('input', { type: 'number', className: 'bqb-input', style: { width: 64 }, value: observerFreq, min: 0, max: 100, onChange: e => setObserverFreq(parseInt(e.target.value, 10) || 0) }),
-            React.createElement('span', { style: { fontSize: 11, color: 'var(--dsw-alias-label-tertiary)' } }, '%（每轮触发观察的概率，调低可省模型调用）')
-          ),
-          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '默认关闭。开启后，插件会在聊天时留意你的情绪（开心、委屈、生气…），发现波动就提醒助手发一张合适的表情包。')
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '默认关闭。开启后，插件会在聊天时留意你的情绪（开心、委屈、生气…），发现波动就提醒助手发一张合适的表情包。频率已按合理默认值调好，不用额外设置。')
         ),
         // AI 识图模型
         React.createElement('div', { className: 'bqb-pref-row' },
