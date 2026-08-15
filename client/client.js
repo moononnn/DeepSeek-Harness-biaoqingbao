@@ -580,8 +580,6 @@ window.__ModuleLoader__.load({
       const [enabled, setEnabled] = React.useState(true)
       const [visionProvider, setVisionProvider] = React.useState('')
       const [visionModel, setVisionModel] = React.useState('')
-      const [observerOn, setObserverOn] = React.useState(false)
-      const [observerFreq, setObserverFreq] = React.useState(30)
       const [freqScene, setFreqScene] = React.useState('daily')
       const [freqDaily, setFreqDaily] = React.useState(50)
       const [freqTask, setFreqTask] = React.useState(20)
@@ -604,8 +602,6 @@ window.__ModuleLoader__.load({
             setEnabled(r.data.enabled === true)
             setVisionProvider(r.data.visionProvider || '')
             setVisionModel(r.data.visionModel || '')
-            setObserverOn(!!(r.data.observer && r.data.observer.enabled))
-            setObserverFreq((r.data.observer && r.data.observer.frequency) || 30)
             if (r.data.freq) { setFreqDaily(r.data.freq.daily); setFreqTask(r.data.freq.task) }
             setDialectId((r.data.dialect && r.data.dialect.id) || '')
             setDialectBoost(!!(r.data.dialect && r.data.dialect.boost))
@@ -672,7 +668,7 @@ window.__ModuleLoader__.load({
         }).catch(() => toast('生成失败', true)).finally(() => setEmbedBusy(''))
       }
       const saveBase = () => {
-        host.call('config-set', { visionProvider, visionModel, observer: { enabled: observerOn, frequency: observerFreq }, freq: { daily: freqDaily, task: freqTask }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
+        host.call('config-set', { visionProvider, visionModel, freq: { daily: freqDaily, task: freqTask }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
           if (r && r.ok) toast('设置已保存', false)
           else toast('保存失败', true)
         }).catch(() => toast('保存失败', true))
@@ -737,18 +733,7 @@ window.__ModuleLoader__.load({
               }, level.label)
             })
           ),
-          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '日常聊天和正事的配图频率分开调。四档都是大致频率，插件会避免连续两轮提醒配图。')
-        ),
-        // 情绪观察自动配图
-        React.createElement('div', { className: 'bqb-pref-row' },
-          React.createElement('div', { className: 'bqb-pref-head' },
-            React.createElement('span', { className: 'bqb-pref-emotion' }, '情绪观察自动配图'),
-            React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
-          ),
-          React.createElement('div', { className: 'bqb-row' },
-            React.createElement('label', null, React.createElement('input', { type: 'checkbox', className: 'bqb-check', checked: observerOn, onChange: e => setObserverOn(e.target.checked) }), '开启：观察每轮对话的情绪，有波动时提示助手发图')
-          ),
-          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '默认关闭。开启后，插件会在聊天时留意你的情绪（开心、委屈、生气…），发现波动就提醒助手发一张合适的表情包。频率已按合理默认值调好，不用额外设置。')
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '日常聊天和正事的配图频率分开调。四档都是大致频率，插件会避免连续两轮提醒配图。两档都选「不配图」时，完全不会自动提示配图。')
         ),
         // AI 识图模型
         React.createElement('div', { className: 'bqb-pref-row' },
