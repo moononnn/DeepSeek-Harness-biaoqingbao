@@ -546,6 +546,22 @@ window.__ModuleLoader__.load({
     }
 
     // ═══════════════ 偏好与设置 ═══════════════
+    const FREQ_LEVELS = [
+      { value: 0, label: '不配图', desc: '这个场景不主动提示配图' },
+      { value: 15, label: '少配图', desc: '偶尔提示' },
+      { value: 50, label: '正常', desc: '大约一半合适场景会提示' },
+      { value: 90, label: '经常配图', desc: '大多数合适场景会提示' },
+    ]
+    // 就近归到档位（与存储值可能不一致时按最近档显示，照搬原版 freqToLevel）
+    function freqToLevel(freq) {
+      let best = FREQ_LEVELS[0]
+      let minDiff = Infinity
+      for (const l of FREQ_LEVELS) {
+        const diff = Math.abs(freq - l.value)
+        if (diff < minDiff) { minDiff = diff; best = l }
+      }
+      return best.value
+    }
     const DIALECT_OPTIONS = [
       { id: '', label: '（不选）' },
       { id: 'dongbei', label: '东北话' },
@@ -566,6 +582,9 @@ window.__ModuleLoader__.load({
       const [visionModel, setVisionModel] = React.useState('')
       const [observerOn, setObserverOn] = React.useState(false)
       const [observerFreq, setObserverFreq] = React.useState(30)
+      const [freqScene, setFreqScene] = React.useState('daily')
+      const [freqDaily, setFreqDaily] = React.useState(50)
+      const [freqTask, setFreqTask] = React.useState(20)
       const [dialectId, setDialectId] = React.useState('')
       const [dialectBoost, setDialectBoost] = React.useState(false)
       const [styleDraft, setStyleDraft] = React.useState('')
@@ -587,6 +606,7 @@ window.__ModuleLoader__.load({
             setVisionModel(r.data.visionModel || '')
             setObserverOn(!!(r.data.observer && r.data.observer.enabled))
             setObserverFreq((r.data.observer && r.data.observer.frequency) || 30)
+            if (r.data.freq) { setFreqDaily(r.data.freq.daily); setFreqTask(r.data.freq.task) }
             setDialectId((r.data.dialect && r.data.dialect.id) || '')
             setDialectBoost(!!(r.data.dialect && r.data.dialect.boost))
             setStyleCurrent((r.data.style && r.data.style.current) || '')
@@ -652,7 +672,7 @@ window.__ModuleLoader__.load({
         }).catch(() => toast('生成失败', true)).finally(() => setEmbedBusy(''))
       }
       const saveBase = () => {
-        host.call('config-set', { visionProvider, visionModel, observer: { enabled: observerOn, frequency: observerFreq }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
+        host.call('config-set', { visionProvider, visionModel, observer: { enabled: observerOn, frequency: observerFreq }, freq: { daily: freqDaily, task: freqTask }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
           if (r && r.ok) toast('设置已保存', false)
           else toast('保存失败', true)
         }).catch(() => toast('保存失败', true))
@@ -695,6 +715,30 @@ window.__ModuleLoader__.load({
           React.createElement('button', { className: 'bqb-btn' + (enabled ? ' bqb-btn-primary' : ''), onClick: () => { host.call('config-set', { enabled: !enabled }).then(r => { if (r && r.ok) { setEnabled(r.data.enabled === true); toast(r.data.enabled ? '已开启配图' : '已关闭配图', false) } }).catch(() => toast('操作失败', true)) } }, enabled ? '已开启' : '已关闭')
         ),
         React.createElement('div', { className: 'bqb-hint' }, '聊天中助手是否可以使用表情包表达情绪。关闭后 express 工具会拒绝发图。'),
+        // 配图频率
+        React.createElement('div', { className: 'bqb-pref-row' },
+          React.createElement('div', { className: 'bqb-pref-head' },
+            React.createElement('span', { className: 'bqb-pref-emotion' }, '配图频率'),
+            React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
+          ),
+          React.createElement('div', { className: 'bqb-row', style: { marginBottom: 8 } },
+            React.createElement('button', { className: 'bqb-btn' + (freqScene === 'daily' ? ' bqb-btn-primary' : ''), style: { flex: 1 }, onClick: () => setFreqScene('daily') }, '日常'),
+            React.createElement('button', { className: 'bqb-btn' + (freqScene === 'task' ? ' bqb-btn-primary' : ''), style: { flex: 1 }, onClick: () => setFreqScene('task') }, '正事')
+          ),
+          React.createElement('div', { className: 'bqb-row' },
+            ...FREQ_LEVELS.map(level => {
+              const current = freqToLevel(freqScene === 'task' ? freqTask : freqDaily)
+              return React.createElement('button', {
+                key: level.value,
+                className: 'bqb-btn' + (current === level.value ? ' bqb-btn-primary' : ''),
+                style: { flex: 1 },
+                title: level.desc,
+                onClick: () => { if (freqScene === 'task') setFreqTask(level.value); else setFreqDaily(level.value) }
+              }, level.label)
+            })
+          ),
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '日常聊天和正事的配图频率分开调。四档都是大致频率，插件会避免连续两轮提醒配图。')
+        ),
         // 情绪观察自动配图
         React.createElement('div', { className: 'bqb-pref-row' },
           React.createElement('div', { className: 'bqb-pref-head' },
