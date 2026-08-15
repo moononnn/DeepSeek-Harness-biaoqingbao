@@ -4,7 +4,8 @@ import assert from 'node:assert/strict'
 import {
   sanitizeTag, strArr, textOfContent, lastUserText, looksNatural,
   detectRitual, passesFrequency, isWorkTalk, shouldBoostRound,
-  collectPrefsForEmotion, prefsScoreBonus, scoreStickers, substringMatch, genId
+  collectPrefsForEmotion, prefsScoreBonus, scoreStickers, substringMatch, genId,
+  parseSuggestion, stripSuggestion
 } from '../lib/core.js'
 
 // ═══════════════ 标签清洗 ═══════════════
@@ -146,4 +147,42 @@ test('genId: 自增补零', () => {
   assert.equal(genId([{ id: 'stk_001' }, { id: 'stk_002' }]), 'stk_003')
   assert.equal(genId([{ id: 'stk_009' }, { id: 'stk_010' }]), 'stk_011')
   assert.equal(genId([{ id: 'other' }]), 'stk_001')
+})
+
+// ═══════════════ 聊天建议解析（和助手聊聊） ═══════════════
+test('parseSuggestion: 正常提取 suggestion JSON', () => {
+  const reply = '你说得对，我来调整一下标签。\n\n<suggestion>\n{"description":"新描述","semantic_description":"新语义","emotion":["委屈","撒娇"],"scene":["认错"],"keywords":["猫","低头"]}\n</suggestion>'
+  const sug = parseSuggestion(reply)
+  assert.ok(sug)
+  assert.equal(sug.description, '新描述')
+  assert.equal(sug.semantic_description, '新语义')
+  assert.deepEqual(sug.emotion, ['委屈', '撒娇'])
+  assert.deepEqual(sug.scene, ['认错'])
+  assert.deepEqual(sug.keywords, ['猫', '低头'])
+})
+
+test('parseSuggestion: 无 suggestion 块返回 null', () => {
+  assert.equal(parseSuggestion('这张图我觉得还行'), null)
+  assert.equal(parseSuggestion(''), null)
+  assert.equal(parseSuggestion(undefined), null)
+})
+
+test('parseSuggestion: JSON 损坏返回 null', () => {
+  assert.equal(parseSuggestion('<suggestion>{not json}</suggestion>'), null)
+  assert.equal(parseSuggestion('<suggestion>42</suggestion>'), null)
+})
+
+test('parseSuggestion: 字段缺省时对应值为 null/空', () => {
+  const sug = parseSuggestion('<suggestion>{"description":"仅描述"}</suggestion>')
+  assert.ok(sug)
+  assert.equal(sug.description, '仅描述')
+  assert.equal(sug.emotion, null)
+  assert.equal(sug.scene, null)
+})
+
+test('stripSuggestion: 剥掉 suggestion 块只留自然语言', () => {
+  const reply = '好的，改一下。\n\n<suggestion>{"description":"x"}</suggestion>'
+  assert.equal(stripSuggestion(reply), '好的，改一下。')
+  assert.equal(stripSuggestion('没有块'), '没有块')
+  assert.equal(stripSuggestion(''), '')
 })

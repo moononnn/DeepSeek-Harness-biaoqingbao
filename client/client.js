@@ -45,10 +45,20 @@ window.__ModuleLoader__.load({
 .bqb-card-desc{color:var(--dsw-alias-label-primary)}
 .bqb-card-emotion{background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:1px 8px}
 .bqb-card-score{color:var(--dsw-alias-label-tertiary)}
-.bqb-fb{display:flex;gap:8px}
+.bqb-fb{display:flex;gap:8px;justify-content:center}
 .bqb-fb-btn{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary);border-radius:10px;padding:2px 10px;font-size:12px;cursor:pointer}
 .bqb-fb-btn:hover{color:var(--dsw-alias-label-primary)}
+.bqb-fb-btn.on-pos{background:#5dae8e;border-color:#5dae8e;color:#fff}
+.bqb-fb-btn.on-pos:hover{color:#fff}
+.bqb-fb-btn.on-neg{background:#e89bb0;border-color:#e89bb0;color:#fff}
+.bqb-fb-btn.on-neg:hover{color:#fff}
 .bqb-fb-msg{font-size:12px;color:var(--dsw-alias-state-success-primary)}
+.bqb-fb-tip{font-size:11px;color:var(--dsw-alias-label-tertiary);text-align:center}
+/* 不喜欢后的聊聊邀请条（原版 v0.25.0 行为） */
+.bqb-chat-invite{display:flex;align-items:center;gap:8px;background:#fdf4f7;border:1px dashed #e8b7c8;border-radius:8px;padding:6px 10px;font-size:11px;color:#8a5a68}
+.bqb-chat-invite .invite-text{flex:1;line-height:1.5}
+.bqb-chat-invite-btn{border:none;border-radius:999px;background:#e89bb0;color:#fff;font-size:11px;padding:4px 12px;cursor:pointer;flex-shrink:0;font-family:inherit}
+.bqb-chat-invite-btn:hover{background:#df86a0}
 .bqb-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:900}
 .bqb-panel{position:fixed;top:0;right:0;bottom:0;width:480px;max-width:94vw;background:var(--dsw-alias-bg-overlay);border-left:1px solid var(--dsw-alias-border-l2);z-index:901;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.18)}
 .bqb-panel-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:none}
@@ -96,6 +106,25 @@ window.__ModuleLoader__.load({
 .bqb-row{display:flex;align-items:center;gap:8px;margin-top:6px}
 .bqb-row label{font-size:13px;color:var(--dsw-alias-label-secondary);display:flex;align-items:center;gap:4px;cursor:pointer}
 .bqb-check{accent-color:var(--dsw-alias-brand-primary)}
+/* 和助手聊聊：内联聊天 */
+.bqb-chat{border-top:1px dashed var(--dsw-alias-border-l1);padding-top:8px;display:flex;flex-direction:column;gap:6px}
+.bqb-chat-msgs{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.bqb-msg-user{align-self:flex-end;background:var(--dsw-alias-brand-primary);color:#fff;border-radius:10px 10px 2px 10px;padding:5px 10px;font-size:12px;max-width:86%;white-space:pre-wrap;word-break:break-word}
+.bqb-msg-assistant{align-self:flex-start;background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);border-radius:10px 10px 10px 2px;padding:5px 10px;font-size:12px;max-width:86%;white-space:pre-wrap;word-break:break-word}
+.bqb-msg-sys{align-self:center;font-size:11px;color:var(--dsw-alias-label-tertiary)}
+.bqb-msg-err{align-self:center;font-size:11px;color:var(--dsw-alias-state-error-primary)}
+.bqb-chat-input{display:flex;gap:6px}
+.bqb-chat-input input{flex:1;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);border-radius:8px;padding:5px 10px;font-size:12px;outline:none;font-family:inherit}
+.bqb-sug{border:1px solid var(--dsw-alias-state-warn-primary);background:var(--dsw-alias-bg-layer-2);border-radius:10px;padding:8px 10px;font-size:12px}
+.bqb-sug-title{font-weight:600;color:var(--dsw-alias-label-primary);margin-bottom:6px}
+.bqb-sug-diff{display:flex;flex-direction:column;gap:4px;color:var(--dsw-alias-label-secondary);line-height:1.5}
+.bqb-sug-diff .old{color:var(--dsw-alias-label-tertiary);text-decoration:line-through}
+.bqb-sug-diff .new{color:var(--dsw-alias-state-success-primary)}
+.bqb-sug-actions{display:flex;gap:6px;margin-top:8px}
+/* 决策日志 */
+.bqb-log-entry{display:flex;align-items:center;gap:8px}
+.bqb-log-thumb{width:40px;height:40px;border-radius:6px;object-fit:cover;background:var(--dsw-alias-bg-base);flex:none}
+.bqb-log-thumb-empty{width:40px;height:40px;border-radius:6px;background:var(--dsw-alias-bg-layer-2);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--dsw-alias-label-tertiary);flex:none}
 `)
 
     // ── 共享状态 ──
@@ -114,12 +143,97 @@ window.__ModuleLoader__.load({
       return store
     }
 
+    // ═══════════════ 和助手聊聊：内联聊天面板 ═══════════════
+    function ChatPanel(props) {
+      const stickerId = props && props.stickerId
+      const [msgs, setMsgs] = React.useState([])
+      const [input, setInput] = React.useState('')
+      const [busy, setBusy] = React.useState(false)
+      const [sid, setSid] = React.useState(null)
+      const [suggestion, setSuggestion] = React.useState(null)
+      const [oldTags, setOldTags] = React.useState(null)
+      const [err, setErr] = React.useState(null)
+      const send = () => {
+        const text = input.trim()
+        if (!text || busy || !stickerId) return
+        setBusy(true)
+        setErr(null)
+        setInput('')
+        setMsgs(ms => [...ms, { role: 'user', content: text }])
+        host.call('chat', { sticker_id: stickerId, session_id: sid || '', message: text }).then(r => {
+          setBusy(false)
+          if (r && r.ok) {
+            setSid(r.session_id)
+            setMsgs(ms => [...ms, { role: 'assistant', content: r.reply }])
+            if (r.suggestion) { setSuggestion(r.suggestion); setOldTags(r.old_tags || null) }
+          } else {
+            setMsgs(ms => ms.slice(0, -1))
+            setErr((r && r.error) || '发送失败')
+          }
+        }).catch(() => {
+          setBusy(false)
+          setMsgs(ms => ms.slice(0, -1))
+          setErr('发送失败')
+        })
+      }
+      const applySug = () => {
+        if (!sid || busy) return
+        setBusy(true)
+        host.call('chat-apply', { session_id: sid }).then(r => {
+          setBusy(false)
+          if (r && r.ok) {
+            setSuggestion(null)
+            setOldTags(null)
+            setMsgs(ms => [...ms, { role: 'sys', content: '✅ 已应用修改建议，标签更新了' }])
+          } else setErr((r && r.error) || '应用失败')
+        }).catch(() => { setBusy(false); setErr('应用失败') })
+      }
+      const labelMap = { description: '描述', semantic_description: '语义描述', emotion: '情绪标签', scene: '场景标签', keywords: '关键词' }
+      const sugKeys = suggestion ? Object.keys(labelMap).filter(k => suggestion[k] != null && !(Array.isArray(suggestion[k]) && suggestion[k].length === 0)) : []
+      const fmt = (v) => Array.isArray(v) ? (v.length ? v.join('、') : '（空）') : (v ? String(v) : '（空）')
+      return React.createElement('div', { className: 'bqb-chat' },
+        React.createElement('div', { className: 'bqb-chat-msgs' },
+          msgs.length === 0 && !busy && !err ? React.createElement('div', { className: 'bqb-msg-sys' }, '说说这张图配得哪里不对，助手会陪你一起调标签') : null,
+          ...msgs.map((m, i) => React.createElement('div', { key: i, className: m.role === 'user' ? 'bqb-msg-user' : (m.role === 'sys' ? 'bqb-msg-sys' : 'bqb-msg-assistant') }, m.content)),
+          busy ? React.createElement('div', { className: 'bqb-msg-sys' }, '助手思考中…') : null,
+          err ? React.createElement('div', { className: 'bqb-msg-err' }, err) : null
+        ),
+        suggestion ? React.createElement('div', { className: 'bqb-sug' },
+          React.createElement('div', { className: 'bqb-sug-title' }, '✨ 助手建议这样调整标签'),
+          React.createElement('div', { className: 'bqb-sug-diff' },
+            sugKeys.length === 0 ? React.createElement('div', null, '（没有需要调整的字段）')
+              : sugKeys.map(k => React.createElement('div', { key: k },
+                  React.createElement('span', { style: { marginRight: 6 } }, labelMap[k]),
+                  React.createElement('span', { className: 'old' }, fmt(oldTags ? oldTags[k] : '')),
+                  ' → ',
+                  React.createElement('span', { className: 'new' }, fmt(suggestion[k]))
+                ))
+          ),
+          React.createElement('div', { className: 'bqb-sug-actions' },
+            React.createElement('button', { className: 'bqb-btn bqb-btn-primary', onClick: applySug, disabled: busy }, '✅ 应用修改'),
+            React.createElement('button', { className: 'bqb-btn', onClick: () => { setSuggestion(null); setOldTags(null) }, disabled: busy }, '放弃')
+          )
+        ) : null,
+        React.createElement('div', { className: 'bqb-chat-input' },
+          React.createElement('input', { value: input, onChange: e => setInput(e.target.value), onKeyDown: e => { if (e.key === 'Enter') send() }, placeholder: '跟助手说说哪里不对…', disabled: busy }),
+          React.createElement('button', { className: 'bqb-btn', onClick: send, disabled: busy || !input.trim() }, '发送')
+        )
+      )
+    }
+
     // ═══════════════ 表情卡片（express 工具结果） ═══════════════
     function ExpressCard(props) {
       const block = props && props.block
       const settled = block && block.kind === 'tool-result'
       const [img, setImg] = React.useState(null)
-      const [fb, setFb] = React.useState(null)
+      const [showFb, setShowFb] = React.useState(true)
+      // 点赞：原版 v0.27.2 行为——每次出图重新选择，按钮不预置亮灯，点了才算数
+      const [fbState, setFbState] = React.useState(null) // 'positive' | 'negative' | null（本卡片内当前选择）
+      const [posMarked, setPosMarked] = React.useState(false)
+      const [negMarked, setNegMarked] = React.useState(false)
+      const [fbTip, setFbTip] = React.useState(null)
+      const [inviteShow, setInviteShow] = React.useState(false) // 点过不喜欢后显示聊聊邀请条
+      const [chatOpen, setChatOpen] = React.useState(false)
       let sticker = null
       let notice = null
       let error = null
@@ -141,6 +255,11 @@ window.__ModuleLoader__.load({
       }
       const stickerId = sticker ? sticker.id : null
       React.useEffect(() => {
+        let alive = true
+        host.call('config-get', {}).then(r => { if (alive && r && r.ok) setShowFb(r.data.showFeedbackButtons !== false) }).catch(() => {})
+        return () => { alive = false }
+      }, [])
+      React.useEffect(() => {
         if (!stickerId) return
         let alive = true
         if (imageCache.has(stickerId)) { setImg(imageCache.get(stickerId)); return }
@@ -150,12 +269,55 @@ window.__ModuleLoader__.load({
         }).catch(() => { if (alive) setImg(null) })
         return () => { alive = false }
       }, [stickerId])
+      // 反馈状态持久显示：预置选中态（点过的图再出现时按钮直接亮灯），每轮独立查询
+      React.useEffect(() => {
+        if (!stickerId) return
+        let alive = true
+        host.call('feedback-state', { sticker_id: stickerId, emotion: (sticker && sticker.emotion) || '' }).then(r => {
+          if (!alive || !r || !r.ok || !r.data) return
+          setFbState(r.data.state || null)
+        }).catch(() => {})
+        return () => { alive = false }
+      }, [stickerId])
+      // 提示文字 2.5 秒后自动消失
+      React.useEffect(() => {
+        if (!fbTip) return
+        const t = setTimeout(() => setFbTip(null), 2500)
+        return () => clearTimeout(t)
+      }, [fbTip])
+      // 点赞：同方向防重复，变心（切方向）允许重新表达（原版 v0.25.2）
       const onFeedback = (kind) => {
-        if (!sticker || fb) return
+        if (!sticker) return
+        if (kind === 'negative' && fbState === 'negative' && negMarked) { setFbTip('这张已经点过啦，下次它再出现再点，我会记得更牢'); return }
+        if (kind === 'positive' && fbState === 'positive' && posMarked) { setFbTip('这张已经点过喜欢啦'); return }
+        const prev = { fbState, posMarked, negMarked }
+        // 乐观更新：先切状态，失败回滚
+        setFbState(kind)
+        setPosMarked(kind === 'positive')
+        setNegMarked(kind === 'negative')
         host.call('feedback', { sticker_id: sticker.id, emotion: sticker.emotion || '', kind }).then(r => {
-          setFb(kind === 'positive' ? '已记下：喜欢，以后会多配这张图' : (r && r.dislike_count ? '已记下：不喜欢（累计 ' + r.dislike_count + ' 次，会慢慢少发）' : '已记下：不喜欢'))
-        }).catch(() => setFb('反馈失败'))
+          if (r && r.ok) {
+            if (kind === 'positive') {
+              setInviteShow(false)
+              setFbTip('已记下：喜欢')
+            } else {
+              setInviteShow(true)
+              setFbTip('已记下：不喜欢（累计 ' + r.dislike_count + ' 次，会慢慢少发）')
+            }
+          } else {
+            setFbState(prev.fbState)
+            setPosMarked(prev.posMarked)
+            setNegMarked(prev.negMarked)
+            setFbTip((r && r.error) || '反馈失败')
+          }
+        }).catch(() => {
+          setFbState(prev.fbState)
+          setPosMarked(prev.posMarked)
+          setNegMarked(prev.negMarked)
+          setFbTip('反馈失败')
+        })
       }
+
       if (!settled) {
         let emotion = null
         try { emotion = JSON.parse(block && block.argsRaw || '{}').emotion || null } catch (e) {}
@@ -165,18 +327,20 @@ window.__ModuleLoader__.load({
       if (notice) return React.createElement('div', { className: 'bqb-card' }, React.createElement('div', { className: 'bqb-card-msg' }, notice))
       if (!sticker) return null
       return React.createElement('div', { className: 'bqb-card' },
-        img ? React.createElement('img', { className: 'bqb-card-img', src: img, alt: sticker.description || '表情包' })
+        img ? React.createElement('img', { className: 'bqb-card-img', src: img, alt: '表情包' })
           : React.createElement('div', { className: 'bqb-card-img-empty' }, '图片加载中…'),
-        React.createElement('div', { className: 'bqb-card-meta' },
-          React.createElement('span', { className: 'bqb-card-desc' }, sticker.description || ''),
-          sticker.emotion ? React.createElement('span', { className: 'bqb-card-emotion' }, '「' + sticker.emotion + '」') : null,
-          typeof sticker.score === 'number' ? React.createElement('span', { className: 'bqb-card-score' }, '匹配度 ' + sticker.score) : null
-        ),
-        fb ? React.createElement('div', { className: 'bqb-fb-msg' }, fb)
-          : React.createElement('div', { className: 'bqb-fb' },
-              React.createElement('button', { className: 'bqb-fb-btn', onClick: () => onFeedback('positive') }, '👍 喜欢'),
-              React.createElement('button', { className: 'bqb-fb-btn', onClick: () => onFeedback('negative') }, '👎 不喜欢')
-            )
+        showFb ? React.createElement('div', null,
+          React.createElement('div', { className: 'bqb-fb' },
+            React.createElement('button', { className: 'bqb-fb-btn' + (fbState === 'positive' ? ' on-pos' : ''), onClick: () => onFeedback('positive') }, '👍 喜欢'),
+            React.createElement('button', { className: 'bqb-fb-btn' + (fbState === 'negative' ? ' on-neg' : ''), onClick: () => onFeedback('negative') }, '👎 不喜欢')
+          ),
+          inviteShow ? React.createElement('div', { className: 'bqb-chat-invite' },
+            React.createElement('span', { className: 'invite-text' }, '觉得配图不精准？可以跟助手聊聊'),
+            React.createElement('button', { className: 'bqb-chat-invite-btn', onClick: () => setChatOpen(!chatOpen) }, chatOpen ? '收起' : '聊聊')
+          ) : null,
+          fbTip ? React.createElement('div', { className: 'bqb-fb-tip' }, fbTip) : null
+        ) : null,
+        chatOpen ? React.createElement(ChatPanel, { stickerId }) : null
       )
     }
 
@@ -575,9 +739,30 @@ window.__ModuleLoader__.load({
       { id: 'xinjiang', label: '新疆话' },
     ]
 
+    function LogThumb(props) {
+      const id = props.id
+      const [src, setSrc] = React.useState(null)
+      React.useEffect(() => {
+        let alive = true
+        if (imageCache.has(id)) { setSrc(imageCache.get(id)); return }
+        host.call('sticker-image', { id }).then(r => {
+          if (alive && r && r.dataUri) { imageCache.set(id, r.dataUri); setSrc(r.dataUri) }
+        }).catch(() => {})
+        return () => { alive = false }
+      }, [id])
+      return src ? React.createElement('img', { className: 'bqb-log-thumb', src, alt: '' }) : React.createElement('div', { className: 'bqb-log-thumb-empty' }, '图')
+    }
+
     function PrefsTab(props) {
+      const fmtTime = (ts) => {
+        const d = new Date(ts)
+        if (isNaN(d.getTime())) return ''
+        const p = n => String(n).padStart(2, '0')
+        return (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes())
+      }
       const [mappings, setMappings] = React.useState([])
       const [enabled, setEnabled] = React.useState(true)
+      const [showFb, setShowFb] = React.useState(true)
       const [visionProvider, setVisionProvider] = React.useState('')
       const [visionModel, setVisionModel] = React.useState('')
       const [freqScene, setFreqScene] = React.useState('daily')
@@ -595,11 +780,14 @@ window.__ModuleLoader__.load({
       const [visionBusy, setVisionBusy] = React.useState(false)
       const [msg, setMsg] = React.useState('')
       const [msgError, setMsgError] = React.useState(false)
+      const [logEntries, setLogEntries] = React.useState([])
+      const [logChat, setLogChat] = React.useState(null) // 展开聊天的日志条目索引
       const reload = () => {
         host.call('prefs-list', {}).then(r => { if (r && r.ok) setMappings(r.data.mappings) }).catch(() => {})
         host.call('config-get', {}).then(r => {
           if (r && r.ok) {
             setEnabled(r.data.enabled === true)
+            setShowFb(r.data.showFeedbackButtons !== false)
             setVisionProvider(r.data.visionProvider || '')
             setVisionModel(r.data.visionModel || '')
             if (r.data.freq) { setFreqDaily(r.data.freq.daily); setFreqTask(r.data.freq.task) }
@@ -616,6 +804,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         host.call('list-models', {}).then(r => { if (r && r.ok && Array.isArray(r.data)) setProviders(r.data) }).catch(() => {})
         host.call('vector-status', {}).then(r => { if (r && r.ok) setVectorStatus(r.data) }).catch(() => {})
+        host.call('decision-log-list', {}).then(r => { if (r && r.ok) setLogEntries(r.data || []) }).catch(() => {})
       }, [])
       const toast = (text, isError) => { setMsg(text); setMsgError(!!isError) }
       const currentProvider = providers.find(p => p.providerId === visionProvider) || null
@@ -711,6 +900,12 @@ window.__ModuleLoader__.load({
           React.createElement('button', { className: 'bqb-btn' + (enabled ? ' bqb-btn-primary' : ''), onClick: () => { host.call('config-set', { enabled: !enabled }).then(r => { if (r && r.ok) { setEnabled(r.data.enabled === true); toast(r.data.enabled ? '已开启配图' : '已关闭配图', false) } }).catch(() => toast('操作失败', true)) } }, enabled ? '已开启' : '已关闭')
         ),
         React.createElement('div', { className: 'bqb-hint' }, '聊天中助手是否可以使用表情包表达情绪。关闭后 express 工具会拒绝发图。'),
+        // 反馈按钮显示开关
+        React.createElement('div', { className: 'bqb-pref-row', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+          React.createElement('span', { className: 'bqb-pref-emotion' }, '显示反馈按钮'),
+          React.createElement('button', { className: 'bqb-btn' + (showFb ? ' bqb-btn-primary' : ''), onClick: () => { host.call('config-set', { showFeedbackButtons: !showFb }).then(r => { if (r && r.ok) { setShowFb(!showFb); toast(!showFb ? '反馈按钮已开启：卡片下方会显示喜欢/不喜欢' : '反馈按钮已关闭：卡片只显示表情包图片', false) } else toast('保存失败', true) }).catch(() => toast('保存失败', true)) } }, showFb ? '已开启' : '已关闭')
+        ),
+        React.createElement('div', { className: 'bqb-hint' }, '聊天里每张配图下方的「喜欢 / 不喜欢」按钮。不想要可以关掉，卡片就只剩一张干干净净的图。'),
         // 配图频率
         React.createElement('div', { className: 'bqb-pref-row' },
           React.createElement('div', { className: 'bqb-pref-head' },
@@ -839,6 +1034,21 @@ window.__ModuleLoader__.load({
           ) : null
         ),
         msg ? React.createElement('div', { className: 'bqb-msg' + (msgError ? ' bqb-msg-error' : '') }, msg) : null,
+        // 最近配图记录（和助手聊聊入口）
+        React.createElement('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '最近配图记录（点「和助手聊聊」可以调教这张图的标签）：'),
+        logEntries.length === 0
+          ? React.createElement('div', { className: 'bqb-empty' }, '还没有配图记录。\n聊天中助手配图后，会出现在这里。')
+          : logEntries.map((e, i) => React.createElement('div', { key: i, className: 'bqb-pref-row' },
+              React.createElement('div', { className: 'bqb-log-entry' },
+                React.createElement(LogThumb, { id: e.sticker_id }),
+                React.createElement('div', { style: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 } },
+                  React.createElement('span', { className: 'bqb-pref-emotion', style: { fontSize: 12, margin: 0 } }, (e.emotion || '（无情绪）') + ' · ' + fmtTime(e.ts)),
+                  React.createElement('span', { className: 'bqb-hint', style: { fontSize: 11 } }, e.sticker_id)
+                ),
+                React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: () => setLogChat(logChat === i ? null : i) }, logChat === i ? '收起' : '和助手聊聊')
+              ),
+              logChat === i ? React.createElement('div', { style: { marginTop: 8 } }, React.createElement(ChatPanel, { stickerId: e.sticker_id })) : null
+            )),
         React.createElement('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '偏好记录（聊天卡片上的 👍/👎 反馈会写入这里）：'),
         mappings.length === 0
           ? React.createElement('div', { className: 'bqb-empty' }, '还没有偏好记录。\n聊天中在表情卡片上点「喜欢 / 不喜欢」，助手就会逐渐学会你的喜好。')
