@@ -7,6 +7,13 @@ window.__ModuleLoader__.load({
     var exports = module.exports
     Object.defineProperty(exports, Symbol.toStringTag, { value: 'Module' })
     let React = require('react')
+    // The drawer must paint above the right-panel columns (aionui-panel,
+    // z-index 30, issue dsh-web-ui#195/#234) and the panel frame chrome.
+    // shell.overlay is a single stacking context at z-index 20, so a drawer
+    // rendered inside it can never rise above the panels; portal the drawer
+    // to document.body so z-index 900/901 live in the root stacking context
+    // (still below the 1000+ dialog layer).
+    let ReactDOM = require('react-dom')
 
     // ── 静态模式 shim：RPC 走 HTTP 路由，CSS 手动插 style 标签 ──
     function hostCall(method, args) {
@@ -348,7 +355,7 @@ window.__ModuleLoader__.load({
     function ManagerPanel(props) {
       const s = useStore()
       if (!s.open) return null
-      return React.createElement('div', { className: 'bqb-root' },
+      return ReactDOM.createPortal(React.createElement('div', { className: 'bqb-root' },
         React.createElement('div', { className: 'bqb-backdrop', onClick: () => { s.open = false; s.emit() } }),
         React.createElement('div', { className: 'bqb-panel' },
           React.createElement('div', { className: 'bqb-panel-header' },
@@ -361,7 +368,7 @@ window.__ModuleLoader__.load({
           ),
           s.tab === 'library' ? React.createElement(LibraryTab, null) : React.createElement(PrefsTab, null)
         )
-      )
+      ), document.body)
     }
 
     function CellImage(props) {
