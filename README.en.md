@@ -15,6 +15,17 @@ Let the assistant in DeepSeek Harness express emotions with stickers.
 - 🗣️ **Dialects** (optional): 9 dialects — Northeastern, Henan, Shanghai, Cantonese, Taiwanese, Sichuan, Shaanxi, Beijing, Xinjiang
 - 🎭 **Mimic my style** (optional): analyzes your chat history and distills your typing style
 - ⚙️ **Settings panel**: sidebar "表情包" entry — global switch, observer, vision model, dialect, style mimicry
+- 👥 **Per-assistant settings**: when assistant presets exist, each one can get its own dialect, sticker frequency and on/off switch (e.g. one assistant speaks Sichuanese, another speaks Cantonese — they never mix)
+
+## Works great with dsh-assistant-manager (recommended)
+
+Install [dsh-assistant-manager](https://github.com/moononnn/dsh-assistant-manager) (brings Hana-style assistant configuration to DSH: create presets, pick personalities, write personas, manage memory) and the per-assistant settings light up automatically:
+
+- Every assistant preset appears in the "每位助手单独设置" list in the settings panel
+- Each assistant gets its **own dialect, sticker frequency and 👍/👎 preferences**
+- Sticker matching automatically follows the assistant speaking in the current session
+
+It also works standalone: without assistant presets, the global defaults apply and everything keeps working.
 
 ## Install
 

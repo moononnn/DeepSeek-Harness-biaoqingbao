@@ -231,6 +231,8 @@ window.__ModuleLoader__.load({
     // ═══════════════ 表情卡片（express 工具结果） ═══════════════
     function ExpressCard(props) {
       const block = props && props.block
+      // dsh toolview 注入的 props 带 sessionId，反馈按会话归属到对应助手
+      const sessionId = (props && props.sessionId) || ''
       const settled = block && block.kind === 'tool-result'
       const [img, setImg] = React.useState(null)
       const [showFb, setShowFb] = React.useState(true)
@@ -280,7 +282,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (!stickerId) return
         let alive = true
-        host.call('feedback-state', { sticker_id: stickerId, emotion: (sticker && sticker.emotion) || '' }).then(r => {
+        host.call('feedback-state', { sticker_id: stickerId, emotion: (sticker && sticker.emotion) || '', session_id: sessionId }).then(r => {
           if (!alive || !r || !r.ok || !r.data) return
           setFbState(r.data.state || null)
         }).catch(() => {})
@@ -302,7 +304,7 @@ window.__ModuleLoader__.load({
         setFbState(kind)
         setPosMarked(kind === 'positive')
         setNegMarked(kind === 'negative')
-        host.call('feedback', { sticker_id: sticker.id, emotion: sticker.emotion || '', kind }).then(r => {
+        host.call('feedback', { sticker_id: sticker.id, emotion: sticker.emotion || '', kind, session_id: sessionId }).then(r => {
           if (r && r.ok) {
             if (kind === 'positive') {
               setInviteShow(false)
@@ -772,6 +774,14 @@ window.__ModuleLoader__.load({
       const [showFb, setShowFb] = React.useState(true)
       const [visionProvider, setVisionProvider] = React.useState('')
       const [visionModel, setVisionModel] = React.useState('')
+      const [contentProvider, setContentProvider] = React.useState('')
+      const [contentModel, setContentModel] = React.useState('')
+      // 自定义 API（OpenAI 兼容端点）
+      const [visionCustom, setVisionCustom] = React.useState({ baseUrl: '', apiKey: '', model: '', hasKey: false })
+      const [contentCustom, setContentCustom] = React.useState({ baseUrl: '', apiKey: '', model: '', hasKey: false })
+      const [customModelsVision, setCustomModelsVision] = React.useState([])
+      const [customModelsContent, setCustomModelsContent] = React.useState([])
+      const [customBusy, setCustomBusy] = React.useState('') // '' | 'vision' | 'content'
       const [freqScene, setFreqScene] = React.useState('daily')
       const [freqDaily, setFreqDaily] = React.useState(50)
       const [freqTask, setFreqTask] = React.useState(20)
@@ -789,6 +799,34 @@ window.__ModuleLoader__.load({
       const [msgError, setMsgError] = React.useState(false)
       const [logEntries, setLogEntries] = React.useState([])
       const [logChat, setLogChat] = React.useState(null) // 展开聊天的日志条目索引
+      // 每位助手单独设置
+      const [presets, setPresets] = React.useState([])
+      const [selPreset, setSelPreset] = React.useState('')
+      const [pEnabled, setPEnabled] = React.useState(true)
+      const [pFreqScene, setPFreqScene] = React.useState('daily')
+      const [pFreqDaily, setPFreqDaily] = React.useState(50)
+      const [pFreqTask, setPFreqTask] = React.useState(20)
+      const [pDialectId, setPDialectId] = React.useState('')
+      const [pDialectBoost, setPDialectBoost] = React.useState(false)
+      const [pHasOverride, setPHasOverride] = React.useState(false)
+      const applyPreset = (item) => {
+        if (!item) return
+        setPEnabled(item.enabled === true)
+        setPFreqDaily(item.freq ? item.freq.daily : 50)
+        setPFreqTask(item.freq ? item.freq.task : 20)
+        setPDialectId((item.dialect && item.dialect.id) || '')
+        setPDialectBoost(!!(item.dialect && item.dialect.boost))
+        setPHasOverride(!!item.hasOverride)
+      }
+      const reloadPresets = () => {
+        host.call('presets-list', {}).then(r => {
+          if (!r || !r.ok || !Array.isArray(r.data.items)) return
+          setPresets(r.data.items)
+          const keep = selPreset ? r.data.items.find(x => x.id === selPreset) : null
+          const target = keep || r.data.items[0] || null
+          if (target) { setSelPreset(target.id); applyPreset(target) }
+        }).catch(() => {})
+      }
       const reload = () => {
         host.call('prefs-list', {}).then(r => { if (r && r.ok) setMappings(r.data.mappings) }).catch(() => {})
         host.call('config-get', {}).then(r => {
@@ -797,6 +835,10 @@ window.__ModuleLoader__.load({
             setShowFb(r.data.showFeedbackButtons !== false)
             setVisionProvider(r.data.visionProvider || '')
             setVisionModel(r.data.visionModel || '')
+            setContentProvider(r.data.contentProvider || '')
+            setContentModel(r.data.contentModel || '')
+            if (r.data.visionCustom) setVisionCustom(r.data.visionCustom)
+            if (r.data.contentCustom) setContentCustom(r.data.contentCustom)
             if (r.data.freq) { setFreqDaily(r.data.freq.daily); setFreqTask(r.data.freq.task) }
             setDialectId((r.data.dialect && r.data.dialect.id) || '')
             setDialectBoost(!!(r.data.dialect && r.data.dialect.boost))
@@ -805,6 +847,7 @@ window.__ModuleLoader__.load({
             if (r.data.embedding) setEmbedCfg(r.data.embedding)
           }
         }).catch(() => {})
+        reloadPresets()
       }
       React.useEffect(reload, [])
       // 模型下拉 + 向量状态（与配置读取并发，独立计数器由各自 then 保护）
@@ -814,6 +857,12 @@ window.__ModuleLoader__.load({
         host.call('decision-log-list', {}).then(r => { if (r && r.ok) setLogEntries(r.data || []) }).catch(() => {})
       }, [])
       const toast = (text, isError) => { setMsg(text); setMsgError(!!isError) }
+      // 操作反馈提示：msg 变化后 3.5 秒自动消失
+      React.useEffect(() => {
+        if (!msg) return
+        const t = setTimeout(() => setMsg(''), 3500)
+        return () => clearTimeout(t)
+      }, [msg])
       const currentProvider = providers.find(p => p.providerId === visionProvider) || null
       const currentModels = currentProvider ? currentProvider.models : []
       const providerSelValue = currentProvider ? currentProvider.providerId : '__custom__'
@@ -825,11 +874,46 @@ window.__ModuleLoader__.load({
         else setVisionModel('')
       }
       const onModelChange = (id) => setVisionModel(id)
+      // 内容分析模型的选择联动（复用同一份模型列表）
+      const contentCurrentProvider = providers.find(p => p.providerId === contentProvider) || null
+      const contentCurrentModels = contentCurrentProvider ? contentCurrentProvider.models : []
+      const contentProviderSelValue = contentCurrentProvider ? contentCurrentProvider.providerId : '__custom__'
+      const contentModelSelValue = contentCurrentModels.some(m => m.id === contentModel) ? contentModel : '__custom__'
+      const onContentProviderChange = (id) => {
+        const p = providers.find(x => x.providerId === id)
+        setContentProvider(id)
+        if (p && p.models.length) setContentModel(p.models[0].id)
+        else setContentModel('')
+      }
+      const onContentModelChange = (id) => setContentModel(id)
+      // 自定义 API：读取模型列表（按区块区分，Key 占位符时后端自动用已存 Key）
+      const loadCustomModels = (slot) => {
+        if (customBusy) return
+        const c = slot === 'content' ? contentCustom : visionCustom
+        const setter = slot === 'content' ? setCustomModelsContent : setCustomModelsVision
+        setCustomBusy(slot)
+        toast('正在读取模型列表…', false)
+        host.call('custom-models', { slot, baseUrl: c.baseUrl, apiKey: c.apiKey }).then(r => {
+          if (r && r.ok) { setter(r.data.models || []); toast('读取到 ' + (r.data.models || []).length + ' 个模型，请选择', false) }
+          else toast('读取失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('读取失败', true)).finally(() => setCustomBusy(''))
+      }
+      const testContent = () => {
+        if (visionBusy) return
+        setVisionBusy(true)
+        toast('正在测试模型连通…', false)
+        // 传表单当前值：不用先保存，测的就是刚选的模型（自定义 API → 下拉选的 dsh 模型）
+        host.call('vision-test', { slot: 'content', visionProvider: contentProvider, visionModel: contentModel, contentCustom }).then(r => {
+          if (r && r.ok) toast('连接正常：' + r.data.provider + ' / ' + r.data.model + (r.data.reply ? '（模型回复：' + r.data.reply + '）' : ''), false)
+          else toast('测试失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('测试失败', true)).finally(() => setVisionBusy(false))
+      }
       const testVision = () => {
         if (visionBusy) return
         setVisionBusy(true)
         toast('正在测试模型连通…', false)
-        host.call('vision-test', { visionProvider, visionModel }).then(r => {
+        // 传表单当前值：不用先保存，测的就是刚选的模型（自定义 API → 下拉选的 dsh 模型）
+        host.call('vision-test', { slot: 'vision', visionProvider, visionModel, visionCustom }).then(r => {
           if (r && r.ok) toast('连接正常：' + r.data.provider + ' / ' + r.data.model + (r.data.reply ? '（模型回复：' + r.data.reply + '）' : ''), false)
           else toast('测试失败：' + (r && r.error || '未知错误'), true)
         }).catch(() => toast('测试失败', true)).finally(() => setVisionBusy(false))
@@ -864,10 +948,24 @@ window.__ModuleLoader__.load({
         }).catch(() => toast('生成失败', true)).finally(() => setEmbedBusy(''))
       }
       const saveBase = () => {
-        host.call('config-set', { visionProvider, visionModel, freq: { daily: freqDaily, task: freqTask }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
+        host.call('config-set', { visionProvider, visionModel, contentProvider, contentModel, visionCustom, contentCustom, freq: { daily: freqDaily, task: freqTask }, dialect: { id: dialectId, boost: dialectBoost } }).then(r => {
           if (r && r.ok) toast('设置已保存', false)
           else toast('保存失败', true)
         }).catch(() => toast('保存失败', true))
+      }
+      const savePreset = () => {
+        if (!selPreset) return
+        host.call('preset-set', { preset_id: selPreset, enabled: pEnabled, freq: { daily: pFreqDaily, task: pFreqTask }, dialect: { id: pDialectId, boost: pDialectBoost } }).then(r => {
+          if (r && r.ok) { toast('已保存「' + ((presets.find(x => x.id === selPreset) || {}).name || selPreset) + '」的设置', false); reloadPresets() }
+          else toast('保存失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('保存失败', true))
+      }
+      const resetPreset = () => {
+        if (!selPreset) return
+        host.call('preset-reset', { preset_id: selPreset }).then(r => {
+          if (r && r.ok) { toast('已恢复为默认设置', false); reloadPresets() }
+          else toast('恢复失败：' + (r && r.error || '未知错误'), true)
+        }).catch(() => toast('恢复失败', true))
       }
       const onAnalyze = (level) => {
         if (styleBusy) return
@@ -901,22 +999,73 @@ window.__ModuleLoader__.load({
         host.call('prefs-remove-item', { index, list, sticker_id: stickerId }).then(r => { if (r && r.ok) reload(); else toast('移除失败', true) }).catch(() => toast('移除失败', true))
       }
       return React.createElement('div', { className: 'bqb-prefs' },
+        // 操作反馈提示：固定吸顶，任何按钮的保存/测试结果都即时可见（不再沉到页面底部）
+        msg ? React.createElement('div', { className: 'bqb-msg' + (msgError ? ' bqb-msg-error' : ''), style: { position: 'sticky', top: 0, zIndex: 5, background: 'var(--dsw-alias-bg-overlay)', padding: '6px 12px', margin: '-4px -4px 4px', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,.12)' } }, msg) : null,
         // 配图开关
         React.createElement('div', { className: 'bqb-pref-row', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
           React.createElement('span', { className: 'bqb-pref-emotion' }, '助手配图开关'),
           React.createElement('button', { className: 'bqb-btn' + (enabled ? ' bqb-btn-primary' : ''), onClick: () => { host.call('config-set', { enabled: !enabled }).then(r => { if (r && r.ok) { setEnabled(r.data.enabled === true); toast(r.data.enabled ? '已开启配图' : '已关闭配图', false) } }).catch(() => toast('操作失败', true)) } }, enabled ? '已开启' : '已关闭')
         ),
         React.createElement('div', { className: 'bqb-hint' }, '聊天中助手是否可以使用表情包表达情绪。关闭后 express 工具会拒绝发图。'),
+        // 每位助手单独设置（per-preset）
+        React.createElement('div', { className: 'bqb-pref-row' },
+          React.createElement('div', { className: 'bqb-pref-head' },
+            React.createElement('span', { className: 'bqb-pref-emotion' }, '每位助手单独设置'),
+            React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: savePreset, disabled: !selPreset }, '保存')
+          ),
+          React.createElement('div', { className: 'bqb-field' },
+            React.createElement('label', null, '选一个助手'),
+            React.createElement('select', { className: 'bqb-select', style: { width: '100%', marginTop: 4 }, value: selPreset, onChange: e => { const id = e.target.value; setSelPreset(id); applyPreset(presets.find(x => x.id === id)) } },
+              presets.length === 0
+                ? React.createElement('option', { value: '' }, '（未发现助手预设，使用下方全局默认设置）')
+                : presets.map(p => React.createElement('option', { key: p.id, value: p.id }, p.name + (p.hasOverride ? ' · 已单独设置' : '')))
+            )
+          ),
+          selPreset ? React.createElement('div', { className: 'bqb-row', style: { marginTop: 8 } },
+            React.createElement('span', { style: { fontSize: 13, color: 'var(--dsw-alias-label-secondary)' } }, '配图开关'),
+            React.createElement('button', { className: 'bqb-btn' + (pEnabled ? ' bqb-btn-primary' : ''), onClick: () => setPEnabled(!pEnabled) }, pEnabled ? '已开启' : '已关闭')
+          ) : null,
+          selPreset ? React.createElement('div', null,
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 8 } },
+              React.createElement('button', { className: 'bqb-btn' + (pFreqScene === 'daily' ? ' bqb-btn-primary' : ''), style: { flex: 1 }, onClick: () => setPFreqScene('daily') }, '日常'),
+              React.createElement('button', { className: 'bqb-btn' + (pFreqScene === 'task' ? ' bqb-btn-primary' : ''), style: { flex: 1 }, onClick: () => setPFreqScene('task') }, '正事')
+            ),
+            React.createElement('div', { className: 'bqb-row' },
+              ...FREQ_LEVELS.map(level => {
+                const current = freqToLevel(pFreqScene === 'task' ? pFreqTask : pFreqDaily)
+                return React.createElement('button', {
+                  key: level.value,
+                  className: 'bqb-btn' + (current === level.value ? ' bqb-btn-primary' : ''),
+                  style: { flex: 1 },
+                  title: level.desc,
+                  onClick: () => { if (pFreqScene === 'task') setPFreqTask(level.value); else setPFreqDaily(level.value) }
+                }, level.label)
+              })
+            ),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 8 } },
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: pDialectId, onChange: e => setPDialectId(e.target.value) },
+                ...DIALECT_OPTIONS.map(o => React.createElement('option', { key: o.id, value: o.id }, o.label))
+              )
+            ),
+            React.createElement('div', { className: 'bqb-row' },
+              React.createElement('label', null, React.createElement('input', { type: 'checkbox', className: 'bqb-check', checked: pDialectBoost, onChange: e => setPDialectBoost(e.target.checked) }), '加强版：每轮注入方言回响（正事场合自动让路）')
+            ),
+            pHasOverride ? React.createElement('div', { className: 'bqb-row', style: { marginTop: 6 } },
+              React.createElement('button', { className: 'bqb-btn', onClick: resetPreset }, '恢复默认设置')
+            ) : null,
+            React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '这个助手单独用的方言和配图频率。保存后只影响 Ta，其他助手不变；没单独设置过的助手统一用下面的「默认」值。')
+          ) : null
+        ),
         // 反馈按钮显示开关
         React.createElement('div', { className: 'bqb-pref-row', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
           React.createElement('span', { className: 'bqb-pref-emotion' }, '显示反馈按钮'),
           React.createElement('button', { className: 'bqb-btn' + (showFb ? ' bqb-btn-primary' : ''), onClick: () => { host.call('config-set', { showFeedbackButtons: !showFb }).then(r => { if (r && r.ok) { setShowFb(!showFb); toast(!showFb ? '反馈按钮已开启：卡片下方会显示喜欢/不喜欢' : '反馈按钮已关闭：卡片只显示表情包图片', false) } else toast('保存失败', true) }).catch(() => toast('保存失败', true)) } }, showFb ? '已开启' : '已关闭')
         ),
         React.createElement('div', { className: 'bqb-hint' }, '聊天里每张配图下方的「喜欢 / 不喜欢」按钮。不想要可以关掉，卡片就只剩一张干干净净的图。'),
-        // 配图频率
+        // 配图频率（全局默认，每位助手可覆盖）
         React.createElement('div', { className: 'bqb-pref-row' },
           React.createElement('div', { className: 'bqb-pref-head' },
-            React.createElement('span', { className: 'bqb-pref-emotion' }, '配图频率'),
+            React.createElement('span', { className: 'bqb-pref-emotion' }, '默认配图频率'),
             React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
           ),
           React.createElement('div', { className: 'bqb-row', style: { marginBottom: 8 } },
@@ -935,7 +1084,7 @@ window.__ModuleLoader__.load({
               }, level.label)
             })
           ),
-          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '日常聊天和正事的配图频率分开调。四档都是大致频率，插件会避免连续两轮提醒配图。两档都选「不配图」时，完全不会自动提示配图。')
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '所有助手的默认配图频率（没在「每位助手单独设置」里单独调过的生效）。日常聊天和正事分开调。两档都选「不配图」时，完全不会自动提示配图。')
         ),
         // AI 识图模型
         React.createElement('div', { className: 'bqb-pref-row' },
@@ -961,13 +1110,60 @@ window.__ModuleLoader__.load({
           ),
           React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '列表来自 dsh 已配置的模型。标注「支持图片」表示该模型声明了图片输入能力；未标注的也可能支持，以实际识图测试为准。'),
           React.createElement('div', { className: 'bqb-field', style: { marginTop: 8 } },
-            React.createElement('label', null, '或自定义 Provider / 模型 ID（留空则用当前会话默认模型）'),
+            React.createElement('label', null, '或使用自定义 API（OpenAI 兼容）'),
             React.createElement('div', { className: 'bqb-row', style: { marginTop: 4 } },
-              React.createElement('input', { className: 'bqb-input', style: { flex: 1 }, value: visionProvider, onChange: e => setVisionProvider(e.target.value), placeholder: 'Provider，如 deepseek-official' }),
-              React.createElement('input', { className: 'bqb-input', style: { flex: 1 }, value: visionModel, onChange: e => setVisionModel(e.target.value), placeholder: '模型 ID，需支持图片输入' })
-            )
+              React.createElement('input', { className: 'bqb-input', style: { flex: 1.4 }, value: visionCustom.baseUrl, onChange: e => setVisionCustom(prev => ({ ...prev, baseUrl: e.target.value })), placeholder: 'Base URL，如 https://api.openai.com/v1' }),
+              React.createElement('input', { className: 'bqb-input', style: { flex: 1 }, type: 'password', value: visionCustom.apiKey, onChange: e => setVisionCustom(prev => ({ ...prev, apiKey: e.target.value })), placeholder: visionCustom.hasKey ? '已保存（输入新 Key 可覆盖）' : 'API Key' })
+            ),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 6 } },
+              React.createElement('button', { className: 'bqb-btn', onClick: () => loadCustomModels('vision'), disabled: !!customBusy }, customBusy === 'vision' ? '读取中…' : '读取模型列表'),
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: visionCustom.model, onChange: e => setVisionCustom(prev => ({ ...prev, model: e.target.value })) },
+                React.createElement('option', { value: '' }, '（选择模型）'),
+                ...customModelsVision.map(m => React.createElement('option', { key: m.id, value: m.id }, m.name || m.id))
+              )
+            ),
+            React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '填 Base URL 和 Key，点「读取模型列表」从你的服务拉取可用模型，挑一个后点保存。识图会走这个自定义 API（支持图片输入）。')
           ),
           React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '识图需要支持图片输入的模型。不配置时使用会话默认模型；若默认模型不支持图片，识图会失败，请在此指定一个视觉模型。')
+        ),
+        // 内容分析模型（聊天时自动配图 + 学我说话）
+        React.createElement('div', { className: 'bqb-pref-row' },
+          React.createElement('div', { className: 'bqb-pref-head' },
+            React.createElement('span', { className: 'bqb-pref-emotion' }, '内容分析模型'),
+            React.createElement('div', { style: { display: 'flex', gap: 6 } },
+              React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: testContent, disabled: visionBusy }, visionBusy ? '测试中…' : '测试一下'),
+              React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
+            )
+          ),
+          React.createElement('div', { className: 'bqb-field' },
+            React.createElement('label', null, '从 dsh 已配置的模型里选（推荐）'),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 4 } },
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: contentProviderSelValue, onChange: e => onContentProviderChange(e.target.value) },
+                React.createElement('option', { value: '__custom__' }, '（自定义…）'),
+                ...providers.map(p => React.createElement('option', { key: p.providerId, value: p.providerId }, p.providerName + (p.models.length ? '' : '（无模型）')))
+              ),
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: contentModelSelValue, onChange: e => onContentModelChange(e.target.value), disabled: !contentCurrentProvider },
+                React.createElement('option', { value: '__custom__' }, '（自定义…）'),
+                ...contentCurrentModels.map(m => React.createElement('option', { key: m.id, value: m.id }, m.name))
+              )
+            )
+          ),
+          React.createElement('div', { className: 'bqb-field', style: { marginTop: 8 } },
+            React.createElement('label', null, '或使用自定义 API（OpenAI 兼容）'),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 4 } },
+              React.createElement('input', { className: 'bqb-input', style: { flex: 1.4 }, value: contentCustom.baseUrl, onChange: e => setContentCustom(prev => ({ ...prev, baseUrl: e.target.value })), placeholder: 'Base URL，如 https://api.openai.com/v1' }),
+              React.createElement('input', { className: 'bqb-input', style: { flex: 1 }, type: 'password', value: contentCustom.apiKey, onChange: e => setContentCustom(prev => ({ ...prev, apiKey: e.target.value })), placeholder: contentCustom.hasKey ? '已保存（输入新 Key 可覆盖）' : 'API Key' })
+            ),
+            React.createElement('div', { className: 'bqb-row', style: { marginTop: 6 } },
+              React.createElement('button', { className: 'bqb-btn', onClick: () => loadCustomModels('content'), disabled: !!customBusy }, customBusy === 'content' ? '读取中…' : '读取模型列表'),
+              React.createElement('select', { className: 'bqb-select', style: { flex: 1 }, value: contentCustom.model, onChange: e => setContentCustom(prev => ({ ...prev, model: e.target.value })) },
+                React.createElement('option', { value: '' }, '（选择模型）'),
+                ...customModelsContent.map(m => React.createElement('option', { key: m.id, value: m.id }, m.name || m.id))
+              )
+            ),
+            React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '填 Base URL 和 Key，点「读取模型列表」从你的服务拉取可用模型，挑一个后点保存。聊天时自动配图与「学我说话」走这个自定义 API。')
+          ),
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '分析聊天语境、判断助手此刻是否适合自动配图（「学我说话」的风格分析也用这个）。建议选速度快、价格低的模型，识图模型负责看图、这个负责读聊天。不配置时自动用识图模型。')
         ),
         // 向量检索
         React.createElement('div', { className: 'bqb-pref-row' },
@@ -1003,10 +1199,10 @@ window.__ModuleLoader__.load({
           ),
           React.createElement('div', { className: 'bqb-hint', style: { marginTop: 2 } }, '配置后可让配图更懂语义：每张图生成一个「语义指纹」，配图时按语义相似度加分，标签没匹配上的图也能靠语义找到。识图成功后会自动生成指纹，一般不用手动点「生成索引」。')
         ),
-        // 方言口音
+        // 方言口音（全局默认，每位助手可覆盖）
         React.createElement('div', { className: 'bqb-pref-row' },
           React.createElement('div', { className: 'bqb-pref-head' },
-            React.createElement('span', { className: 'bqb-pref-emotion' }, '方言口音'),
+            React.createElement('span', { className: 'bqb-pref-emotion' }, '默认方言口音'),
             React.createElement('button', { className: 'bqb-btn', style: { padding: '1px 8px', fontSize: 11 }, onClick: saveBase }, '保存')
           ),
           React.createElement('div', { className: 'bqb-row' },
@@ -1017,7 +1213,7 @@ window.__ModuleLoader__.load({
           React.createElement('div', { className: 'bqb-row' },
             React.createElement('label', null, React.createElement('input', { type: 'checkbox', className: 'bqb-check', checked: dialectBoost, onChange: e => setDialectBoost(e.target.checked) }), '加强版：每轮对话注入方言回响（正事场合自动让路）')
           ),
-          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '选择方言后，插件会把对应的口音设定注入系统提示词，助手打字自然带家乡味。选「（不选）」即关闭。')
+          React.createElement('div', { className: 'bqb-hint', style: { marginTop: 6 } }, '所有助手的默认方言（没在「每位助手单独设置」里单独挑过的生效）。选择后，插件会把对应的口音设定注入系统提示词，助手打字自然带家乡味。选「（不选）」即关闭。')
         ),
         // 学我说话
         React.createElement('div', { className: 'bqb-pref-row' },
@@ -1040,7 +1236,6 @@ window.__ModuleLoader__.load({
             )
           ) : null
         ),
-        msg ? React.createElement('div', { className: 'bqb-msg' + (msgError ? ' bqb-msg-error' : '') }, msg) : null,
         // 最近配图记录（和助手聊聊入口）
         React.createElement('div', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, '最近配图记录（点「和助手聊聊」可以调教这张图的标签）：'),
         logEntries.length === 0

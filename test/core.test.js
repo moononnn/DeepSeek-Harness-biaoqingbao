@@ -5,7 +5,7 @@ import {
   sanitizeTag, strArr, textOfContent, lastUserText, looksNatural,
   detectRitual, passesFrequency, isWorkTalk, shouldBoostRound,
   collectPrefsForEmotion, prefsScoreBonus, scoreStickers, substringMatch, genId,
-  parseSuggestion, stripSuggestion
+  parseSuggestion, stripSuggestion, resolvePresetId, effectivePresetConfig
 } from '../lib/core.js'
 
 // ═══════════════ 标签清洗 ═══════════════
@@ -185,4 +185,73 @@ test('stripSuggestion: 剥掉 suggestion 块只留自然语言', () => {
   assert.equal(stripSuggestion(reply), '好的，改一下。')
   assert.equal(stripSuggestion('没有块'), '没有块')
   assert.equal(stripSuggestion(''), '')
+})
+
+// ═══════════════ 会话 → 助手（preset）解析 ═══════════════
+test('resolvePresetId: header.agentPreset 直接命中', () => {
+  const session = { header: { id: 's1', agentPreset: 'xiaohua' }, events: [] }
+  assert.equal(resolvePresetId(session), 'xiaohua')
+})
+
+test('resolvePresetId: 空白窗口切换后以最新 selected 事件为准', () => {
+  const session = {
+    header: { id: 's1', agentPreset: 'xiaohua' },
+    events: [
+      { type: 'agent-preset/selected', data: { agentPreset: 'yue' } },
+      { type: 'agent-preset/selected', data: { agentPreset: 'butter' } },
+      { type: 'user/message' },
+    ]
+  }
+  assert.equal(resolvePresetId(session), 'butter')
+})
+
+test('resolvePresetId: 无 header 时从事件拿', () => {
+  const session = {
+    header: undefined,
+    events: [{ type: 'agent-preset/selected', data: { agentPreset: 'ming' } }]
+  }
+  assert.equal(resolvePresetId(session), 'ming')
+})
+
+test('resolvePresetId: 拿不到时返回 default（兜底）', () => {
+  assert.equal(resolvePresetId(null), 'default')
+  assert.equal(resolvePresetId({}), 'default')
+  assert.equal(resolvePresetId({ header: { id: 's1' }, events: [] }), 'default')
+  assert.equal(resolvePresetId({ header: { id: 's1', agentPreset: '' }, events: [{ type: 'user/message' }] }), 'default')
+})
+
+// ═══════════════ per-preset 配置合并 ═══════════════
+test('effectivePresetConfig: 无覆盖时全部沿用全局默认', () => {
+  const g = { enabled: true, dialect: { id: 'sichuan', boost: false }, freq: { daily: 50, task: 20 } }
+  const eff = effectivePresetConfig(g, null)
+  assert.equal(eff.enabled, true)
+  assert.equal(eff.dialect.id, 'sichuan')
+  assert.equal(eff.dialect.boost, false)
+  assert.equal(eff.freq.daily, 50)
+  assert.equal(eff.freq.task, 20)
+})
+
+test('effectivePresetConfig: 覆盖只改显式字段，其余继承全局', () => {
+  const g = { enabled: true, dialect: { id: 'sichuan', boost: false }, freq: { daily: 50, task: 20 } }
+  const eff = effectivePresetConfig(g, { enabled: false, freq: { daily: 0 } })
+  assert.equal(eff.enabled, false)
+  assert.equal(eff.dialect.id, 'sichuan')
+  assert.equal(eff.freq.daily, 0)
+  assert.equal(eff.freq.task, 20)
+})
+
+test('effectivePresetConfig: 全局缺省字段给默认值', () => {
+  const eff = effectivePresetConfig({}, {})
+  assert.equal(eff.enabled, true)
+  assert.equal(eff.dialect.id, '')
+  assert.equal(eff.freq.daily, 50)
+  assert.equal(eff.freq.task, 20)
+  const eff2 = effectivePresetConfig(undefined, undefined)
+  assert.equal(eff2.enabled, true)
+})
+
+test('effectivePresetConfig: 全局关闭时未覆盖的助手也关闭', () => {
+  const g = { enabled: false }
+  assert.equal(effectivePresetConfig(g, null).enabled, false)
+  assert.equal(effectivePresetConfig(g, { enabled: true }).enabled, true)
 })
