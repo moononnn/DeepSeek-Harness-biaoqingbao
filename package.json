@@ -1,7 +1,7 @@
 {
   "name": "dsh-biaoqingbao",
   "description": "Sticker/emoji expression plugin for DeepSeek Harness — assistants send stickers to express emotions, with library management, AI tagging, auto-matching, dialects and style mimicry. · DSH 表情包插件：让助手用表情包表达情绪，含图库管理、AI 识图、自动配图、方言口音与学我说话。",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "main": "lib/index.js",
   "license": "MIT",
